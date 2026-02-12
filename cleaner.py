@@ -1,6 +1,7 @@
 import os
 import asyncio
 import redis.asyncio as redis
+import json
 
 
 REDIS_1_URL = os.getenv("REDIS_1")
@@ -9,7 +10,7 @@ REDIS_2_URL = os.getenv("REDIS_2")
 
 async def cleanup():
     if not REDIS_1_URL or not REDIS_2_URL:
-        print("❌ REDIS_1 или REDIS_2 не указаны в Variables")
+        print("❌ REDIS_1 или REDIS_2 не указаны")
         return
 
     redis1 = redis.from_url(REDIS_1_URL, decode_responses=True)
@@ -17,32 +18,26 @@ async def cleanup():
 
     print("🔍 Начинаем очистку...")
 
-    # --------------------------
-    # Очистка booking заявок
-    # --------------------------
+    # -------- BOOKING (string JSON) --------
+    async for key in redis1.scan_iter("booking:*"):
+        raw = await redis1.get(key)
 
-    booking_keys = await redis1.keys("booking:*")
+        if not raw:
+            continue
 
-    for key in booking_keys:
-        data = await redis1.hgetall(key)
-
-        if not data:
+        try:
+            data = json.loads(raw)
+        except:
             continue
 
         status = data.get("status")
 
-        # Удаляем только завершённые
         if status in ["confirmed", "rejected"]:
             await redis1.delete(key)
             print(f"🗑 Удалена заявка {key}")
 
-    # --------------------------
-    # Очистка event ключей
-    # --------------------------
-
-    event_keys = await redis2.keys("event:*")
-
-    for key in event_keys:
+    # -------- EVENTS --------
+    async for key in redis2.scan_iter("event:*"):
         await redis2.delete(key)
         print(f"🗑 Удалён event {key}")
 
