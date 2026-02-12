@@ -18,28 +18,33 @@ async def cleanup():
 
     print("🔍 Начинаем очистку...")
 
-    # -------- BOOKING (string JSON) --------
+    # BOOKING
     async for key in redis1.scan_iter("booking:*"):
-        raw = await redis1.get(key)
-
-        if not raw:
-            continue
-
         try:
-            data = json.loads(raw)
-        except:
-            continue
+            key_type = await redis1.type(key)
 
-        status = data.get("status")
+            if key_type == "string":
+                raw = await redis1.get(key)
+                if raw:
+                    data = json.loads(raw)
+                    if data.get("status") in ["confirmed", "rejected"]:
+                        await redis1.delete(key)
+                        print(f"🗑 Удалена заявка {key}")
 
-        if status in ["confirmed", "rejected"]:
-            await redis1.delete(key)
-            print(f"🗑 Удалена заявка {key}")
+            else:
+                # если вдруг это hash или что-то другое
+                await redis1.delete(key)
 
-    # -------- EVENTS --------
+        except Exception as e:
+            print(f"Ошибка с ключом {key}: {e}")
+
+    # EVENTS
     async for key in redis2.scan_iter("event:*"):
-        await redis2.delete(key)
-        print(f"🗑 Удалён event {key}")
+        try:
+            await redis2.delete(key)
+            print(f"🗑 Удалён event {key}")
+        except Exception as e:
+            print(f"Ошибка event {key}: {e}")
 
     print("✅ Очистка завершена")
 
